@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 use anyhow::Result;
@@ -9,73 +7,21 @@ use symbolica::{
     evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
     symb,
 };
+use tracing::{debug, debug_span, info};
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum OdeCoordinate {
-    Cartesian,
-    Polar,
-}
-
-#[derive(Debug, Clone)]
-pub struct OdeInputs {
-    pub inputs: Vec<String>,
-    pub parsed_expressions: Result<Vec<Atom>, String>,
-}
-
-impl OdeInputs {
-    pub fn parse_expressions(&mut self) {
-        self.parsed_expressions = self
-            .inputs
-            .iter()
-            .map(|input| Atom::parse(input).map_err(|e| e.to_string()))
-            .collect::<Result<Vec<Atom>, String>>();
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct OdeSettings {
-    pub integration_length: f64,
-    pub ics: Vec<f64>,
-    pub coordinate: OdeCoordinate,
-    pub dimensions: u8,
-    pub inputs: OdeInputs,
-    symbols: HashMap<String, Symbol>,
-}
-
-impl Default for OdeSettings {
-    fn default() -> Self {
-        let mut symbols = HashMap::new();
-
-        for s in &["x", "y", "r", "theta"] {
-            symbols.insert(s.to_string(), symb!(s));
-        }
-
-        let expr = "x^2 - 7y - 10";
-
-        Self {
-            integration_length: 10.0,
-            ics: vec![1.0, 1.0],
-            coordinate: OdeCoordinate::Cartesian,
-            dimensions: 1,
-            inputs: OdeInputs {
-                inputs: vec![expr.to_string()],
-                parsed_expressions: Ok(vec![Atom::parse(expr).unwrap()]),
-            },
-            symbols,
-        }
-    }
-}
+// TODO: Move these
+use super::{settings::OdeSettings, OdeCoordinate};
 
 struct MaxStepODESolver<I: ODEIntegrator> {
     integrator: I,
 }
 
-struct ParsedODEProblem {
+struct ExpressionODEProblem {
     dimensions: u8,
     evaluator: ExpressionEvaluator<f64>,
 }
 
-impl ParsedODEProblem {
+impl ExpressionODEProblem {
     pub fn create(settings: &OdeSettings) -> Result<Self> {
         let expressions = settings
             .inputs
@@ -147,7 +93,7 @@ impl<I: ODEIntegrator> ODESolver for MaxStepODESolver<I> {
     }
 }
 
-impl ODEProblem for ParsedODEProblem {
+impl ODEProblem for ExpressionODEProblem {
     fn rhs(&self, t: f64, y: &[f64], dy: &mut [f64]) -> Result<()> {
         if y.len() != self.dimensions as usize {
             anyhow::bail!(
@@ -180,10 +126,16 @@ pub fn solve_ode(
     dt: f64,
     ics: &[f64],
 ) -> Result<(Vec<f64>, Vec<Vec<f64>>)> {
-    let solver = ParsedODEProblem::create(settings)?;
+    let span = debug_span!(target: "metrics", "solve_ode");
+    let _enter = span.enter();
 
+    debug!(target: "metrics", ?t_span, ?dt, ics = ?ics.to_vec());
+    let solver = ExpressionODEProblem::create(settings)?;
+
+    debug!(target: "metrics", "Creating ODE solver");
     let rkf45 = RKF45::new(1e-4, 0.9, 1e-6, 1e-2, 1000);
     let ode_solver = MaxStepODESolver { integrator: rkf45 };
 
+    debug!(target: "metrics", "Solving ODE");
     ode_solver.solve(&solver, t_span, dt, ics)
 }

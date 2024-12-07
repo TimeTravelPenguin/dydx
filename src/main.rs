@@ -1,6 +1,8 @@
-use anyhow::{anyhow, Context, Result};
-use args::Cli;
+use crate::args::Cli;
 use crate::logging::configure_logging;
+use crate::ode::{solve_ode, OdeCoordinate, OdeSettings};
+
+use anyhow::{anyhow, Result};
 use clap::Parser;
 use lazy_static::lazy_static;
 use nannou::prelude::{map_range, pt2, srgb, App, Draw, Frame, Rect, Update, BLACK, RED};
