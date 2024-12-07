@@ -8,7 +8,7 @@ pub fn set_fonts(egui: &mut Egui) {
 
     let mut fonts = FontDefinitions::default();
 
-    let stix_fonts = [
+    let stix_text = [
         (
             "STIXTwoText-Bold",
             include_bytes!("../fonts/STIX_Two/STIXTwoText-Bold.ttf").as_slice(),
@@ -41,31 +41,43 @@ pub fn set_fonts(egui: &mut Egui) {
             "STIXTwoText-SemiBoldItalic",
             include_bytes!("../fonts/STIX_Two/STIXTwoText-SemiBoldItalic.ttf").as_slice(),
         ),
-        (
-            "STIXTwoMath-Regular",
-            include_bytes!("../fonts/STIX_Two/STIXTwoMath-Regular.ttf").as_slice(),
-        ),
     ];
 
-    for (name, font) in &stix_fonts {
+    for (name, font) in &stix_text {
         fonts
             .font_data
             .insert(name.to_string(), FontData::from_static(font));
     }
 
+    fonts.font_data.insert(
+        "STIXTwoMath-Regular".to_string(),
+        FontData::from_static(include_bytes!("../fonts/STIX_Two/STIXTwoMath-Regular.ttf")),
+    );
+
     fonts
         .families
-        .entry(FontFamily::Name("STIXTwo".into()))
+        .entry(FontFamily::Name("STIXTwoText".into()))
         .or_default()
-        .extend(stix_fonts.iter().map(|(name, _)| name.to_string()));
+        .extend(stix_text.iter().map(|(name, _)| name.to_string()));
+
+    fonts
+        .families
+        .entry(FontFamily::Name("STIXTwoMath".into()))
+        .or_default()
+        .push("STIXTwoMath-Regular".to_string());
 
     ctx.set_fonts(fonts);
 
     let mut style = (*ctx.style()).clone();
 
     style.text_styles.insert(
-        TextStyle::Name("STIXRegular".into()),
-        FontId::new(16.0, FontFamily::Name("STIXTwo".into())),
+        TextStyle::Name("STIXTwoText".into()),
+        FontId::new(16.0, FontFamily::Name("STIXTwoText".into())),
+    );
+
+    style.text_styles.insert(
+        TextStyle::Name("STIXTwoMath".into()),
+        FontId::new(16.0, FontFamily::Name("STIXTwoMath".into())),
     );
 
     ctx.set_style(style);

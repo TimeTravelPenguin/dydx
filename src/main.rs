@@ -208,7 +208,7 @@ fn update_egui(model: &mut Model, update: Update) {
                 .unwrap_or("".to_string());
 
             let value = value.replace("theta", "θ");
-            ui.label(RichText::new(value).text_style(TextStyle::Name("STIXRegular".into())));
+            ui.label(RichText::new(value).text_style(TextStyle::Name("STIXTwoMath".into())));
         });
 
         ui.separator();
