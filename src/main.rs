@@ -16,6 +16,7 @@ use tracing::{debug, debug_span, error, info, info_span, warn};
 use tracing_unwrap::{OptionExt, ResultExt};
 
 mod args;
+mod axes_2d;
 mod fonts;
 mod logging;
 mod ode;
@@ -32,8 +33,8 @@ fn main() -> Result<()> {
 
     let _guard = configure_logging(log_level).expect("Failed to configure logging");
 
-    panic::set_hook(Box::new(|panic_info| {
-        eprintln!("Application panicked: {}", panic_info);
+    panic::set_hook(Box::new(move |panic_info| {
+        error!(?panic_info);
     }));
 
     let licence = std::option_env!("SYMBOLICA_LICENSE");
@@ -142,7 +143,7 @@ fn update(app: &App, model: &mut Model, update: Update) {
         model.settings.ode_settings.ics = vec![x, y];
     }
 
-    // change x/y bound on scroll
+    // TODO: change x/y bound on scroll
 }
 
 fn update_egui(model: &mut Model, update: Update) {
@@ -255,7 +256,7 @@ fn draw_plot(draw: &Draw, win: &Rect, model: &Model, domain: &[f64], image: &[f6
         (pt2(x as f32, y as f32), col)
     });
 
-    let vertices = vertices.clone().take_while(|(p, _)| {
+    let vertices = vertices.take_while(|(p, _)| {
         let is_finite = p.x.is_finite() && p.y.is_finite();
 
         if !is_finite {
