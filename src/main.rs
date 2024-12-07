@@ -188,6 +188,7 @@ fn update_egui(model: &mut Model, update: Update) {
         }
 
         let opts = PrintOptions {
+            precision: None,
             terms_on_new_line: false,
             color_top_level_sum: false,
             color_builtin_symbols: false,
