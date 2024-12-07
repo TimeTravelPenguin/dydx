@@ -1,21 +1,21 @@
 use anyhow::{anyhow, Context, Result};
 use args::Cli;
+use crate::logging::configure_logging;
 use clap::Parser;
-use dotenv_codegen::dotenv;
 use lazy_static::lazy_static;
-use log::*;
 use nannou::prelude::{map_range, pt2, srgb, App, Draw, Frame, Rect, Update, BLACK, RED};
 use nannou_egui::{
     egui::{self, RichText, TextStyle},
     Egui,
 };
-use ode::{solve_ode, OdeCoordinate, OdeSettings};
-use std::env::{set_var, var};
 use std::panic;
 use symbolica::{atom::Atom, printer::PrintOptions, LicenseManager};
+use tracing::{debug, debug_span, error, info, info_span, warn};
+use tracing_unwrap::{OptionExt, ResultExt};
 
 mod args;
 mod fonts;
+mod logging;
 mod ode;
 
 lazy_static! {
@@ -23,54 +23,38 @@ lazy_static! {
 }
 
 fn main() -> Result<()> {
-    LicenseManager::set_license_key(dotenv!("SYMBOLICA_LICENSE"))
-        .map_err(|e| anyhow!("Failed to set license key: {}", e))?;
+    let log_level = CLI
+        .verbose
+        .tracing_level()
+        .expect_or_log("Invalid log level");
 
-    let log_level = CLI.verbose.log_level().context("Failed to get log level")?;
-    init_logging(log_level);
+    let _guard = configure_logging(log_level).expect("Failed to configure logging");
 
     panic::set_hook(Box::new(|panic_info| {
         eprintln!("Application panicked: {}", panic_info);
     }));
+
+    let licence = std::option_env!("SYMBOLICA_LICENSE");
+    let licence = match licence {
+        Some(val) => {
+            info!("Using Symbolica license from environment");
+            val.to_string()
+        }
+        None => {
+            info!("Using Symbolica license from .env file");
+            dotenv::var("SYMBOLICA_LICENSE").unwrap_or_log()
+        }
+    };
+
+    LicenseManager::set_license_key(&licence)
+        .map_err(|e| anyhow!("Failed to set license key: {}", e))?;
 
     nannou::app(model).update(update).run();
 
     Ok(())
 }
 
-fn init_logging(level: Level) {
-    // if RUST_BACKTRACE is set, ignore the arg given and set `trace` no matter what
-    let mut overridden = false;
-    let verbosity = if std::env::var("RUST_BACKTRACE").unwrap_or_else(|_| "0".into()) == "1" {
-        overridden = true;
-        "trace"
-    } else {
-        match level {
-            Level::Error => "error",
-            Level::Warn => "warn",
-            Level::Info => "info",
-            Level::Debug => "debug",
-            _ => "trace",
-        }
-    };
-
-    let crate_name = env!("CARGO_PKG_NAME");
-    set_var("RUST_LOG", format!("{}={}", crate_name, verbosity));
-
-    pretty_env_logger::init();
-
-    if overridden {
-        warn!("RUST_BACKTRACE is set, overriding user verbosity level");
-    } else if verbosity == "trace" {
-        set_var("RUST_BACKTRACE", "1");
-        trace!("RUST_BACKTRACE has been set");
-    };
-    info!(
-        "Set verbosity to {}",
-        var("RUST_LOG").expect("Should set RUST_LOG environment variable")
-    );
-}
-
+#[derive(Debug)]
 struct PlotSettings {
     x_min: f64,
     x_max: f64,
@@ -89,6 +73,7 @@ impl Default for PlotSettings {
     }
 }
 
+#[derive(Debug)]
 struct Settings {
     ode_settings: ode::OdeSettings,
     plot_settings: PlotSettings,
@@ -99,7 +84,18 @@ struct Model {
     egui: Egui,
 }
 
+impl std::fmt::Debug for Model {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Model")
+            .field("settings", &self.settings)
+            .finish()
+    }
+}
+
 fn model(app: &App) -> Model {
+    let span = info_span!("model");
+    let _enter = span.enter();
+
     let window_id = app
         .new_window()
         .view(view)
@@ -123,6 +119,10 @@ fn model(app: &App) -> Model {
 }
 
 fn update(app: &App, model: &mut Model, update: Update) {
+    let span = debug_span!("update");
+    let _enter = span.enter();
+
+    debug!("updating egui");
     update_egui(model, update);
 
     let egui_wants_pointer = model.egui.ctx().wants_pointer_input();
@@ -293,6 +293,8 @@ fn compute_ode_soln(ode_settings: &OdeSettings) -> Result<(Vec<f64>, Vec<Vec<f64
             y0 = f64::atan2(y, x);
         }
 
+        let span = debug_span!(target: "metrics", "solve_ode");
+        let _enter = span.enter();
         solve_ode(
             ode_settings,
             (x0, xn),
@@ -353,16 +355,24 @@ fn view(app: &App, model: &Model, frame: Frame) {
 
     draw.background().color(BLACK);
 
-    let ode_soln = compute_ode_soln(&settings.ode_settings);
+    {
+        let span = debug_span!(target: "metrics","draw_plot");
+        let _enter = span.enter();
 
-    match ode_soln {
-        Ok((domain, image)) => {
-            let image = image.into_iter().flatten().collect::<Vec<_>>();
-            draw_plot(&draw, &win, model, &domain, image.as_slice())
-                .unwrap_or_else(|e| error!("Error drawing plot: {}", e));
-        }
-        Err(e) => {
-            error!("Failed to solve ODE: {}", e);
+        debug!(target: "metrics", "Computing ODE solution");
+        let ode_soln = compute_ode_soln(&settings.ode_settings);
+
+        match ode_soln {
+            Ok((domain, image)) => {
+                debug!("Drawing ODE solution");
+
+                let image = image.into_iter().flatten().collect::<Vec<_>>();
+                draw_plot(&draw, &win, model, &domain, image.as_slice())
+                    .unwrap_or_else(|e| error!("Error drawing plot: {}", e));
+            }
+            Err(e) => {
+                error!("Failed to solve ODE: {}", e);
+            }
         }
     }
 

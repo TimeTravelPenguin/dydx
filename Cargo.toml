@@ -6,12 +6,11 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.93"
 clap = { version = "4.5.21", features = ["wrap_help", "derive"] }
-clap-verbosity-flag = "3.0.1"
+clap-verbosity-flag = { version = "3.0.1", features = ["tracing"] }
 dotenv = "0.15.0"
 dotenv_codegen = "0.15.0"
 egui = "0.29.1"
 lazy_static = "1.5.0"
-log = "0.4.22"
 nannou = "0.19.0"
 nannou_egui = "0.19.0"
 peroxide = "0.39.0"
@@ -19,6 +18,26 @@ pretty_env_logger = "0.5.0"
 specs = { version = "0.20.0", features = ["derive"] }
 symbolica = "0.13.0"
 thiserror = "2.0.3"
+tracing = { version = "0.1.41", features = ["valuable"] }
+tracing-appender = "0.2.3"
+tracing-forest = { version = "0.1.6", features = [
+  "chrono",
+  "ansi",
+  "smallvec",
+  "tokio",
+  "serde",
+  "env-filter",
+] }
+tracing-subscriber = { version = "0.3.19", features = [
+  "tracing-log",
+  "env-filter",
+  "fmt",
+  "json",
+  "time",
+  "local-time",
+  "valuable",
+] }
+tracing-unwrap = { version = "1.0.1", features = ["log-location"] }
 
 [profile.profiling]
 inherits = "release"
